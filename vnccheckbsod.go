@@ -24,6 +24,12 @@ func Panic(err error) {
 	}
 }
 
+func asciiPress(c *vnc.ClientConn, r rune) {
+	Panic(c.KeyEvent(uint32(r), true))
+	time.Sleep(5 * time.Millisecond)
+	Panic(c.KeyEvent(uint32(r), false))
+}
+
 func keyDown(c *vnc.ClientConn) {
 	Panic(c.KeyEvent(0xfee3, true))
 	time.Sleep(200 * time.Millisecond)
@@ -95,11 +101,12 @@ func getScreenshot(vc *vncCon) *image.RGBA {
 }
 
 type imageResult struct {
-	img     *image.RGBA
-	i       int
-	cmd     *exec.Cmd
-	vncport int
-	err     error
+	img      *image.RGBA
+	imgAfter *image.RGBA
+	i        int
+	cmd      *exec.Cmd
+	vncport  int
+	err      error
 }
 
 func hist(img *image.RGBA) map[color.RGBA]int {
@@ -162,6 +169,7 @@ func main() {
 	baseport := flag.Int("vncbaseport", 77, "VNC port from which to start (5900+vncbaseport)")
 	vnchost := flag.String("vnchost", "localhost", "VNC host to connect")
 	histogram := flag.String("histogram", "", "print histogram from a specific VNC TCP connection string")
+	use_keyboard_effect := flag.Bool("test-keyboard-effect", false, "test for BSOD by seeing if massive typing affects the screen")
 	settle := flag.String("settle", "", "Time duration to wait before checking if QEMU have BSOD")
 	nocgroup := flag.Bool("disable-cgroup", false, "should you capture all PIDs in a cgroup, killing previous processes")
 	rounds := flag.Int("rounds", 1, "How many times should I run")
@@ -222,8 +230,13 @@ func main() {
 				}
 				c, err := newConn(fmt.Sprintf("%s:%s", *vnchost, vnctcpport))
 				keyDown(c.conn)
+				if *use_keyboard_effect {
+					for i := 0; i < 300; i++ {
+						asciiPress(c.conn, 'a')
+					}
+				}
 				if err == nil {
-					result <- &imageResult{getScreenshot(c), i, p, *baseport + i, nil}
+					result <- &imageResult{getScreenshot(c), nil, i, p, *baseport + i, nil}
 
 				} else {
 					result <- &imageResult{i: i, err: err}
